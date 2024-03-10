@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Recorder</title>
+    <style>
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        #recorded-text {
+            margin-top: 20px;
+            height: 100px;
+            width: 100%;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Voice Recorder</h1>
+    <button id="record-button">Record</button>
+    <div id="recorded-text"></div>
+    <label for="toggle">Use Text:</label>
+    <input type="checkbox" id="toggle">
+</div>
+
+<script>
+    const recordButton = document.getElementById('record-button');
+    const recordedText = document.getElementById('recorded-text');
+    const toggle = document.getElementById('toggle');
+
+    let recording = false;
+
+    recordButton.addEventListener('click', () => {
+        if (!recording) {
+            // Start recording
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    const mediaRecorder = new MediaRecorder(stream);
+                    const chunks = [];
+
+                    mediaRecorder.addEventListener('dataavailable', event => {
+                        chunks.push(event.data);
+                    });
+
+                    mediaRecorder.addEventListener('stop', () => {
+                        const blob = new Blob(chunks, { type: 'audio/wav' });
+                        const audioUrl = URL.createObjectURL(blob);
+                        const audio = new Audio(audioUrl);
+                        recordedText.innerHTML += `<audio controls src="${audioUrl}"></audio><br>`;
+                    });
+
+                    mediaRecorder.start();
+                    recording = true;
+                    recordButton.textContent = 'Stop';
+                    recordButton.style.backgroundColor = 'red';
+
+                    recordButton.addEventListener('click', () => {
+                        mediaRecorder.stop();
+                        recording = false;
+                        recordButton.textContent = 'Record';
+                        recordButton.style.backgroundColor = '';
+                    });
+                })
+                .catch(error => {
+                    console.error('Error accessing microphone:', error);
+                });
+        } else {
+            // Stop recording
+            console.log('Recording stopped');
+            recording = false;
+        }
+    });
+
+    toggle.addEventListener('change', () => {
+        const useText = toggle.checked;
+        if (useText) {
+            // Enable text input
+            recordedText.contentEditable = true;
+        } else {
+            // Disable text input
+            recordedText.contentEditable = false;
+        }
+    });
+</script>
+
+</body>
+</html>
