@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Recorder</title>
+  <style>
+    /* CSS styles for the container and recorded text */
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    #recorded-text {
+      margin-top: 20px;
+      height: 100px;
+      width: 100%;
+      overflow: auto;
+    }
+    /* Hide elements with the "hidden" class */
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Title -->
+  <h1>Voice Recorder</h1>
+  <!-- Toggle options for text and audio -->
+  <div id="toggle-options">
+    <label for="toggle-text">Text</label>
+    <input type="radio" id="toggle-text" name="toggle-option" value="text" checked>
+    <label for="toggle-audio">Audio</label>
+    <input type="radio" id="toggle-audio" name="toggle-option" value="audio">
+  </div>
+  <!-- Text input area (hidden by default) -->
+  <div id="text-input" class="hidden">
+    <textarea id="manual-text" placeholder="Enter text here..."></textarea>
+    <button id="store-text">Store Text</button>
+  </div>
+  <!-- Audio input area (hidden by default) -->
+  <div id="audio-input" class="hidden">
+    <button id="record-button">Record</button>
+    <button id="stop-button" class="hidden">Stop</button> <!-- Added stop button -->
+    <div id="recorded-text"></div>
+  </div>
+</div>
+
+<script>
+  // Get references to DOM elements
+  const toggleOptions = document.getElementById('toggle-options');
+  const textInput = document.getElementById('text-input');
+  const manualText = document.getElementById('manual-text');
+  const storeTextButton = document.getElementById('store-text');
+  const audioInput = document.getElementById('audio-input');
+  const recordButton = document.getElementById('record-button');
+  const stopButton = document.getElementById('stop-button'); // Added stop button
+  const recordedText = document.getElementById('recorded-text');
+
+  let mediaRecorder;
+  let recordedChunks = [];
+  let storedTexts = [];
+
+  // Event listener for toggle options
+  toggleOptions.addEventListener('change', (event) => {
+    const selectedOption = event.target.value;
+    if (selectedOption === 'text') {
+      textInput.classList.remove('hidden');
+      audioInput.classList.add('hidden');
+    } else if (selectedOption === 'audio') {
+      audioInput.classList.remove('hidden');
+      textInput.classList.add('hidden');
+    }
+  });
+
+  // Event listener for store text button
+  storeTextButton.addEventListener('click', () => {
+    const text = manualText.value.trim();
+    if (text !== '') {
+      storedTexts.push(text);
+      manualText.value = '';
+      console.log('Text stored:', text);
+    } else {
+      console.log('No text entered.');
+    }
+  });
+
+  // Event listener for record button
+  recordButton.addEventListener('click', () => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+              mediaRecorder = new MediaRecorder(stream);
+              mediaRecorder.ondataavailable = event => {
+                recordedChunks.push(event.data);
+              };
+              mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(recordedChunks, { type: 'audio/wav' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                recordedText.innerHTML += `<audio controls src="${audioUrl}"></audio><br>`;
+              };
+              mediaRecorder.start();
+              recordButton.classList.add('hidden');
+              stopButton.classList.remove('hidden'); // Show stop button
+            })
+            .catch(error => {
+              console.error('Error accessing microphone:', error);
+            });
+  });
+
+  // Event listener for stop button
+  stopButton.addEventListener('click', () => {
+    mediaRecorder.stop();
+    recordedChunks = [];
+    stopButton.classList.add('hidden');
+    recordButton.classList.remove('hidden'); // Show record button
+  });
+</script>
+
+</body>
+</html>
