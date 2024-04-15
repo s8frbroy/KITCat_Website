@@ -6,16 +6,33 @@
   <title>Voice Recorder</title>
   <style>
     /* CSS styles for the container and recorded text */
+    .box-container {
+      display: inline-block;
+    }
+
     .container {
-      max-width: 600px;
+      max-width: 800px;
       margin: 0 auto;
       text-align: center;
+    }
+    .title {
+      font-weight: bold;
+      margin-bottom: 5px; /* Add some space between the title and the box */
     }
     #recorded-text {
       margin-top: 20px;
       height: 100px;
       width: 100%;
       overflow: auto;
+    }
+    .KITCat, .asr {
+      width: 200px;
+      height: 100px;
+      text-align: center;
+      border: 10px solid #ccc;
+      overflow: auto; /* Add scrollbar if content overflows */
+      display: inline-block; /* Display elements inline */
+      margin-right: 15px; /* Add some space between the elements */
     }
     /* Hide elements with the "hidden" class */
     .hidden {
@@ -36,7 +53,7 @@
     <input type="radio" id="toggle-audio" name="toggle-option" value="audio">
   </div>
   <!-- Text input area (hidden by default) -->
-  <div id="text-input" class="hidden">
+  <div id="text-input">
     <textarea id="manual-text" placeholder="Enter text here..."></textarea>
     <button id="store-text">Store Text</button>
   </div>
@@ -46,7 +63,16 @@
     <button id="stop-button" class="hidden">Stop</button> <!-- Added stop button -->
     <div id="recorded-text"></div>
   </div>
+
+  <div class="title">ASR Text</div>
+  <div class="asr" id="dynamicTextBox1">
+  </div>
+
+  <div class="title">KITCat Text</div>
+  <div class="KITCat" id="dynamicTextBox2">
+  </div>
 </div>
+
 
 <script>
   // Get references to DOM elements
@@ -59,9 +85,82 @@
   const stopButton = document.getElementById('stop-button'); // Added stop button
   const recordedText = document.getElementById('recorded-text');
 
+  // use to update ASR Text
+  function concat_and_last(text_box, text, last = 15){
+    // Concatenate the two strings
+    var concatenatedString = text_box + " " + text;
+
+    // Split the concatenated string into an array of words
+    var wordsArray = concatenatedString.split(/\s+/);
+    // Extract the last 10 words from the array
+    var lastWords = wordsArray.slice(-last);
+
+    // Join the extracted words back into a single string
+    var resultString = lastWords.join(" ");
+
+    asr_text = resultString;
+    console.log("new asr_text",asr_text)
+    return resultString;
+  }
+  function updateASRText(text) {
+    res = concat_and_last(asr_text, text);
+    asr_text = res;
+    console.log("new ASR text: ", text);
+    document.getElementById("dynamicTextBox1").innerText = res;
+  }
+
+  // Function to update the content of the KITCat text box
+  function updateKITCatText(text) {
+    res = concat_and_last(kitcat_text, text);
+    kitcat_text = res;
+    document.getElementById("dynamicTextBox2").innerText = res;
+  }
+
+
   let mediaRecorder;
   let recordedChunks = [];
   let storedTexts = [];
+  let asr_text = "";
+  let kitcat_text = "";
+
+  // connection to server
+  /* connection issues:
+  NOTE: connection could have been established without port forwarding on local machine
+        --> issue with server?? firewall, certificate??
+  * checked "rg3hpc1.isl.iar.kit.edu" // "i13hpc60.isl.iar.kit.edu" // with and without frbroy@
+  * checked ports 80 --> no permission from server side
+  *         port 443 --> same
+  *         --> no privileges to use ports below 1024
+  *         port 8080 --> no error on server side but on client side
+  *         port 8208 --> same
+  *         port 8090 --> server-side error: already in use
+  * */
+
+  port_server =  "8208"//"8080"
+  url_server = "rg3hpc1.isl.iar.kit.edu" // "i13hpc60.isl.iar.kit.edu" //
+  console.log("Hi")
+  console.log("ws://" + url_server + ":" + port_server)
+  webSocket = new WebSocket("ws://" + url_server + ":" + port_server);
+
+  // Event listener for when the WebSocket connection is established
+  webSocket.addEventListener('open', function (event) {
+    console.log('WebSocket connection established');
+  });
+
+  // Event listener for when a message is received from the server
+  webSocket.addEventListener('message', function (event) {
+    console.log('Message from server:', event);
+    var eventData = JSON.parse(event.data);
+    //console.log("Name: ", eventData.name);
+    //console.log("data: ", eventData.data);
+
+    if (eventData.name.includes("asr")) {
+      updateASRText(eventData.data);
+    }
+    else{
+      updateKITCatText(eventData.data);
+    }
+  });
 
   // Event listener for toggle options
   toggleOptions.addEventListener('change', (event) => {
@@ -79,9 +178,21 @@
   storeTextButton.addEventListener('click', () => {
     const text = manualText.value.trim();
     if (text !== '') {
+
+      // send text to server:
+      const data = {
+        type: 'text',
+        value: text,
+      };
+
+      // Convert the dictionary to JSON
+      const json = JSON.stringify(data);
+      webSocket.send(json);
+      console.log("Message send to Server: ", json);
+
       storedTexts.push(text);
       manualText.value = '';
-      console.log('Text stored:', text);
+
     } else {
       console.log('No text entered.');
     }
@@ -98,6 +209,20 @@
               mediaRecorder.onstop = () => {
                 const audioBlob = new Blob(recordedChunks, { type: 'audio/wav' });
                 const audioUrl = URL.createObjectURL(audioBlob);
+
+                // send audio to server:
+                // send text to server:
+                const data = {
+                  type: 'audio',
+                  value: audioBlob,
+                };
+
+                // Convert the dictionary to JSON
+                const json = JSON.stringify(data);
+                webSocket.send(json);
+                console.log(audioBlob)
+
+
                 recordedText.innerHTML += `<audio controls src="${audioUrl}"></audio><br>`;
               };
               mediaRecorder.start();
