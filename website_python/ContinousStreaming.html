@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Continuous Audio Recording</title>
+</head>
+<body>
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let intervalId;
+
+        // Function to start recording audio
+        async function startRecording() {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+
+            mediaRecorder.ondataavailable = (event) => {
+                audioChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                audioChunks = [];
+                await sendAudio(audioBlob);
+            };
+
+            mediaRecorder.start();
+
+            // Send audio data every 10 seconds
+            intervalId = setInterval(async () => {
+                if (mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
+                    mediaRecorder.start();
+                }
+            }, 1000);
+        }
+
+        // Function to send audio data to the server
+        async function sendAudio(audioBlob) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob);
+
+            const response = await fetch('/process-audio', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            console.log(result);
+        }
+
+        // Automatically start recording when the page loads
+        window.onload = startRecording;
+    </script>
+</body>
+</html>

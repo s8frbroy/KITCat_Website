@@ -99,6 +99,12 @@
     console.log("new asr_text",asr_text)
     return resultString;
   }
+  function runPythonScript() {
+  // Get the path to the Python script.
+  var pythonScriptPath = "./audioClient/KITCat.py";
+  subprocess.run(["python", pythonScriptPath]);
+
+  }
   function updateASRText(text) {
     res = concat_and_last(asr_text, text);
     asr_text = res;
@@ -120,6 +126,57 @@
   let asr_text = "";
   let kitcat_text = "";
 
+  // set session
+  //let set_session = {'log': 'True', 'error_correction': False, 'asr_prop': {}, 'mt_prop': {}, 'prep_prop': {}, 'textseg_prop': {}, 'tts_prop': {}, 'lip_prop': {}};
+  //let set_grap_url = 'http://frederik:frederik@i13hpc60:8090/ltapi/get_default_asr'
+
+  const args = {
+  url: 'http://i13hpc60:8090',
+  api: 'ltapi',
+  token: 'your_token_here' // Replace with your actual token
+};
+
+const d = {
+  log: 'True',
+  error_correction: false,
+  asr_prop: {},
+  mt_prop: {},
+  prep_prop: {},
+  textseg_prop: {},
+  tts_prop: {},
+  lip_prop: {}
+};
+
+console.log("set graph: ", `${args.url}/${args.api}/get_default_asr`);
+console.log("the data: ", d);
+
+const url = `${args.url}/${args.api}/get_default_asr`;
+
+// Function to set cookies in the request header
+function setCookie(name, value) {
+  document.cookie = `${name}=${value}; path=/`;
+}
+
+setCookie('_forward_auth', args.token);
+
+fetch('http://frederik:frederik@i13hpc60:8090/ltapi/get_default_asr', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  },
+  body: JSON.stringify(d),
+  credentials: 'include' // This is necessary to include cookies in the request
+})
+.then(response => response.text())
+.then(text => {
+  const [sessionID, streamID] = text.split(' ');
+  console.log('Session ID:', sessionID);
+  console.log('Stream ID:', streamID);
+})
+.catch(error => {
+  console.error('Error:', error);
+});
   // connection to server
   /* connection issues:
   NOTE: connection could have been established without port forwarding on local machine
@@ -133,8 +190,8 @@
   *         port 8090 --> server-side error: already in use
   * */
 
-  port_server =  "8208"//"8080"
-  url_server = "rg3hpc1.isl.iar.kit.edu" // "i13hpc60.isl.iar.kit.edu" //
+  port_server =  "8090"//"8080"
+  url_server = "localhost"//"rg3hpc1.isl.iar.kit.edu" // "i13hpc60.isl.iar.kit.edu" //
   console.log("Hi")
   console.log("ws://" + url_server + ":" + port_server)
   webSocket = new WebSocket("ws://" + url_server + ":" + port_server);
@@ -150,12 +207,13 @@
     var eventData = JSON.parse(event.data);
     //console.log("Name: ", eventData.name);
     //console.log("data: ", eventData.data);
-
-    if (eventData.name.includes("asr")) {
-      updateASRText(eventData.data);
+    console.log("Message from server decoded: ", eventData)
+    if (eventData.name == "asr") {
+      // update the text box with server input
+      updateASRText(eventData.value);
     }
     else{
-      updateKITCatText(eventData.data);
+      updateKITCatText(eventData.value);
     }
   });
 
@@ -194,7 +252,7 @@
       console.log('No text entered.');
     }
   });
-
+  
   // Event listener for record button
   recordButton.addEventListener('click', () => {
     navigator.mediaDevices.getUserMedia({ audio: true })
@@ -205,23 +263,87 @@
               };
               mediaRecorder.onstop = () => {
                 const audioBlob = new Blob(recordedChunks, { type: 'audio/wav' });
+
+                // Convert audio blob to base64 string
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64data = reader.result.split(',')[1]; // Extracting base64 data from the result
+                       // Send a request to the Flask server to execute the Python script
+                    const sessionID = {{ sessionID }};
+                    const streamID = {{ streamID }};
+                    const e = 1;
+                    const s = 0;
+                    const token = "None";
+                    
+                    // Print the values to the console
+                    console.log("Session ID:", sessionID);
+                    console.log("Stream ID:", streamID);
+                    console.log('{{ server }}/{{ session }}/{{ stream }}/append')
+                    fetch('{{ server }}/{{ session }}/{{ stream }}/append', {
+                      method: 'POST',
+                      headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify(JSON.stringify({ "controll": "END"}))
+                    })
+
+                    fullUrl = `http://frederik:frederik@i13hpc60:8090/ltapi/${SessionID}/${StreamID}/append`;
+                    console.log(fullUrl);
+                    fetch(fullUrl, {
+                      method: 'POST',
+                      headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify(JSON.stringify(base64data))
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(responseData => {
+                        console.log('Data was sent successfully:', responseData);
+                    })
+                    .catch(error => {
+                        console.error('Error sending data:', error);
+                    });  
+                //     //console.log(typeof base64data);
+                //     fetch('/execute-python-script', {
+                //         method: 'POST',
+                //         headers: {
+                //             'Content-Type': 'application/json',
+                //         },
+                //         body: JSON.stringify({audio: base64data}),
+                //     })
+                //     .then(response => {
+                //         if (!response.ok) {
+                //             throw new Error('Network response was not ok');
+                //         }
+                //         return response.text();
+                //     })
+                //     .then(data => {
+                //         console.log('Python script executed successfully:', data);
+                //     })
+                //     .catch(error => {
+                //         console.error('Error executing Python script:', error);
+                //     });
+                //     const data = {
+                //         type: 'audio',
+                //         value: base64data,
+                //     };
+                //     const json = JSON.stringify(data);
+                //     webSocket.send(json);
+                // };
+                reader.readAsDataURL(audioBlob);
+
                 const audioUrl = URL.createObjectURL(audioBlob);
-
-                // send audio to server:
-                // send text to server:
-                const data = {
-                  type: 'audio',
-                  value: audioBlob,
-                };
-
-                // Convert the dictionary to JSON
-                const json = JSON.stringify(data);
-                webSocket.send(json);
-                console.log(audioBlob)
-
-
                 recordedText.innerHTML += `<audio controls src="${audioUrl}"></audio><br>`;
               };
+              reader.readAsDataURL(audioBlob);
+            };
               mediaRecorder.start();
               recordButton.classList.add('hidden');
               stopButton.classList.remove('hidden'); // Show stop button
@@ -237,6 +359,8 @@
     recordedChunks = [];
     stopButton.classList.add('hidden');
     recordButton.classList.remove('hidden'); // Show record button
+
+
   });
 </script>
 

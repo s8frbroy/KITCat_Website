@@ -99,6 +99,12 @@
     console.log("new asr_text",asr_text)
     return resultString;
   }
+  function runPythonScript() {
+  // Get the path to the Python script.
+  var pythonScriptPath = "./audioClient/KITCat.py";
+  subprocess.run(["python", pythonScriptPath]);
+
+  }
   function updateASRText(text) {
     res = concat_and_last(asr_text, text);
     asr_text = res;
@@ -133,8 +139,8 @@
   *         port 8090 --> server-side error: already in use
   * */
 
-  port_server =  "8208"//"8080"
-  url_server = "rg3hpc1.isl.iar.kit.edu" // "i13hpc60.isl.iar.kit.edu" //
+  port_server =  "8090"//"8080"
+  url_server = "localhost"//"rg3hpc1.isl.iar.kit.edu" // "i13hpc60.isl.iar.kit.edu" //
   console.log("Hi")
   console.log("ws://" + url_server + ":" + port_server)
   webSocket = new WebSocket("ws://" + url_server + ":" + port_server);
@@ -150,12 +156,13 @@
     var eventData = JSON.parse(event.data);
     //console.log("Name: ", eventData.name);
     //console.log("data: ", eventData.data);
-
-    if (eventData.name.includes("asr")) {
-      updateASRText(eventData.data);
+    console.log("Message from server decoded: ", eventData)
+    if (eventData.name == "asr") {
+      // update the text box with server input
+      updateASRText(eventData.value);
     }
     else{
-      updateKITCatText(eventData.data);
+      updateKITCatText(eventData.value);
     }
   });
 
@@ -194,50 +201,70 @@
       console.log('No text entered.');
     }
   });
-
-  // Event listener for record button
-  recordButton.addEventListener('click', () => {
+  
+// Event listener for record button
+recordButton.addEventListener('click', () => {
     navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
-              mediaRecorder = new MediaRecorder(stream);
-              mediaRecorder.ondataavailable = event => {
+        .then(stream => {
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.ondataavailable = event => {
                 recordedChunks.push(event.data);
-              };
-              mediaRecorder.onstop = () => {
+            };
+            mediaRecorder.onstop = () => {
                 const audioBlob = new Blob(recordedChunks, { type: 'audio/wav' });
-                const audioUrl = URL.createObjectURL(audioBlob);
 
-                // send audio to server:
-                // send text to server:
-                const data = {
-                  type: 'audio',
-                  value: audioBlob,
+                // Convert audio blob to base64 string
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64data = reader.result.split(',')[1]; // Extracting base64 data from the result
+                    
+                    // Use sessionID and streamID passed from Flask
+                    const sessionID = {{ sessionID }};
+                    const streamID = {{ streamID }};
+                    const e = 1;
+                    const s = 0;
+                    const token = 'NDGIIwFB3s30200JJl0jMkgkdcaZ4IxsPWud3-DDEMQ=|1722515904|uzhgc@student.kit.edu';
+
+                    // Print the values to the console
+                    console.log("Session ID:", sessionID);
+                    console.log("Stream ID:", streamID);
+
+                    // Print the server URL to the console
+                    console.log('{{ server }}/{{api}}/{{ sessionID }}/{{ streamID }}/append');
+
+                    // Send a request to the Flask server to execute the Python script
+                    fetch('{{ server }}/{{ sessionID }}/{{ streamID }}/append', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`,
+                        },
+                        body: JSON.stringify(base64data), // Removed extra JSON.stringify
+                    });
                 };
+                
+                reader.readAsDataURL(audioBlob);
 
-                // Convert the dictionary to JSON
-                const json = JSON.stringify(data);
-                webSocket.send(json);
-                console.log(audioBlob)
-
-
+                const audioUrl = URL.createObjectURL(audioBlob);
                 recordedText.innerHTML += `<audio controls src="${audioUrl}"></audio><br>`;
-              };
-              mediaRecorder.start();
-              recordButton.classList.add('hidden');
-              stopButton.classList.remove('hidden'); // Show stop button
-            })
-            .catch(error => {
-              console.error('Error accessing microphone:', error);
-            });
-  });
+            };
 
-  // Event listener for stop button
-  stopButton.addEventListener('click', () => {
+            mediaRecorder.start();
+            recordButton.classList.add('hidden');
+            stopButton.classList.remove('hidden'); // Show stop button
+        })
+        .catch(error => {
+            console.error('Error accessing microphone:', error);
+        });
+});
+
+// Event listener for stop button
+stopButton.addEventListener('click', () => {
     mediaRecorder.stop();
     recordedChunks = [];
     stopButton.classList.add('hidden');
     recordButton.classList.remove('hidden'); // Show record button
-  });
+});
 </script>
 
 </body>
